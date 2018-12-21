@@ -27,10 +27,11 @@ class PandasTableView(QTableView):
 
 
 class PandasTableModel(QAbstractTableModel):
-
     def __init__(self, *args, file_name, **kwargs):
         super().__init__(*args, **kwargs)
-        self._dataframe: DataFrame = read_csv(file_name, index_col=0)
+        self._dataframe: DataFrame = read_csv(file_name)
+        by = self._dataframe.columns[0]
+        self._dataframe.sort_values(by=by, ascending=True, inplace=True)
 
     def rowCount(self, parent=None):
         return self._dataframe.shape[0]
@@ -43,6 +44,13 @@ class PandasTableModel(QAbstractTableModel):
             return str(self._dataframe.iloc[index.row(), index.column()])
         else:
             return QVariant()
+
+    def sort(self, column, order):
+        by = self._dataframe.columns[column]
+        ascending = order == QtCore.Qt.AscendingOrder
+        self.layoutAboutToBeChanged.emit()
+        self._dataframe.sort_values(by=by, ascending=ascending, inplace=True)
+        self.layoutChanged.emit()
 
     def headerData(self, section, orientation, role):
         if role == QtCore.Qt.DisplayRole:
@@ -68,6 +76,7 @@ class AppMainWindow(QMainWindow):
 
     def _init_table(self):
         self._table = PandasTableView()
+        self._table.setSortingEnabled(True)
         self.setCentralWidget(self._table)
 
     def _init_menu(self):
