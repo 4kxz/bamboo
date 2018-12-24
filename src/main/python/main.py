@@ -4,16 +4,20 @@ from fbs_runtime.application_context import ApplicationContext
 from IPython.terminal.embed import InteractiveShellEmbed
 from pandas import DataFrame
 from pandas import read_csv
+from pandas import set_option
 from PyQt5 import QtCore
 from PyQt5.QtCore import QAbstractTableModel
 from PyQt5.QtCore import QVariant
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QAction
+from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtWidgets import QMenu
 from PyQt5.QtWidgets import QMenuBar
 from PyQt5.QtWidgets import QTableView
+from PyQt5.QtWidgets import QVBoxLayout
 
 
 class AppContext(ApplicationContext):
@@ -27,10 +31,10 @@ class PandasTableView(QTableView):
     pass
 
 
-class PandasTableModel(QAbstractTableModel):
-    def __init__(self, *args, file_name, **kwargs):
+class PandasDataframeModel(QAbstractTableModel):
+    def __init__(self, *args, dataframe, **kwargs):
         super().__init__(*args, **kwargs)
-        self._dataframe: DataFrame = read_csv(file_name)
+        self._dataframe: DataFrame = dataframe
         by = self._dataframe.columns[0]
         self._dataframe.sort_values(by=by, ascending=True, inplace=True)
 
@@ -82,14 +86,23 @@ class AppMainWindow(QMainWindow):
 
     def _init_menu(self):
         menu_bar: QMenuBar = self.menuBar()
-        file_menu: QMenu = menu_bar.addMenu("&File")
-        file_menu.addAction(self._action("&Open", "Ctrl+O", self._open))
-        file_menu.addAction(self._action("&Console", "Ctrl+T", self._console))
+        f: QMenu = menu_bar.addMenu("&File")
+        f.addAction(self._action("&Open", "Ctrl+O", self._open))
+        f.addAction(self._action("&Console", "Ctrl+T", self._console))
+        d: QMenu = menu_bar.addMenu("&DataFrame")
+        d.addAction(self._action("&Describe", "Ctrl+Shift+D", self._describe))
 
     def _load(self, file_name):
-        self.setWindowTitle(f"Bamboos - {file_name}")
-        model = PandasTableModel(file_name=file_name)
+        self.setWindowTitle(f"{file_name} - Bamboos")
+        self._dataframe = read_csv(file_name)
+        model = PandasDataframeModel(dataframe=self._dataframe)
         self._table.setModel(model)
+        self._table.resizeColumnsToContents()
+        self._status()
+
+    def _status(self):
+        n, m = self._dataframe.shape
+        self.statusBar().addWidget(QLabel(f"{n} rows, {m} columns"))
 
     def _open(self):
         file_name, _ = QFileDialog.getOpenFileName()
@@ -97,8 +110,21 @@ class AppMainWindow(QMainWindow):
             return
         self._load(file_name)
 
+    def _describe(self):
+        dataframe = self._dataframe.describe()
+        model = PandasDataframeModel(dataframe=dataframe)
+        table = PandasTableView(self)
+        table.setModel(model)
+        table.resizeColumnsToContents()
+        dialog = QDialog(self)
+        dialog.resize(self.size() * 0.9)
+        layout = QVBoxLayout()
+        dialog.setLayout(layout)
+        layout.addWidget(table)
+        dialog.exec_()
+
     def _console(self):
-        df = self._table.model()._dataframe  # noqa
+        df = self._dataframe  # noqa
         shell()
 
     def _action(self, label, shortcut, callback):
@@ -114,3 +140,4 @@ if __name__ == "__main__":
     appctxt = AppContext()
     exit_code = appctxt.run()
     sys.exit(exit_code)
+    set_option("precision", 1)
