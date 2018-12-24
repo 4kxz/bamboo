@@ -1,8 +1,9 @@
 import sys
 
 from fbs_runtime.application_context import ApplicationContext
-from pandas import read_csv
+from IPython.terminal.embed import InteractiveShellEmbed
 from pandas import DataFrame
+from pandas import read_csv
 from PyQt5 import QtCore
 from PyQt5.QtCore import QAbstractTableModel
 from PyQt5.QtCore import QVariant
@@ -66,7 +67,7 @@ class AppMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self._init_ui()
-        self._load("/home/carlos/Documents/sample.csv")
+        self._load("~/Documents/sample.csv")
 
     def _init_ui(self):
         self.setWindowTitle(f"Bamboos")
@@ -82,11 +83,13 @@ class AppMainWindow(QMainWindow):
     def _init_menu(self):
         menu_bar: QMenuBar = self.menuBar()
         file_menu: QMenu = menu_bar.addMenu("&File")
-        open_action = QAction(QIcon("icon.ico"), "&Open", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self._open)
-        file_menu.addAction(open_action)
-        menu_bar.addMenu("&About")
+        file_menu.addAction(self._action("&Open", "Ctrl+O", self._open))
+        file_menu.addAction(self._action("&Console", "Ctrl+T", self._console))
+
+    def _load(self, file_name):
+        self.setWindowTitle(f"Bamboos - {file_name}")
+        model = PandasTableModel(file_name=file_name)
+        self._table.setModel(model)
 
     def _open(self):
         file_name, _ = QFileDialog.getOpenFileName()
@@ -94,13 +97,20 @@ class AppMainWindow(QMainWindow):
             return
         self._load(file_name)
 
-    def _load(self, file_name):
-        self.setWindowTitle(f"Bamboos - {file_name}")
-        model = PandasTableModel(file_name=file_name)
-        self._table.setModel(model)
+    def _console(self):
+        df = self._table.model()._dataframe  # noqa
+        shell()
+
+    def _action(self, label, shortcut, callback):
+        action = QAction(QIcon("icon.ico"), label, self)
+        action.setShortcut(shortcut)
+        action.triggered.connect(callback)
+        return action
 
 
 if __name__ == "__main__":
+    shell = InteractiveShellEmbed()
+    shell.enable_gui("qt5")
     appctxt = AppContext()
     exit_code = appctxt.run()
     sys.exit(exit_code)

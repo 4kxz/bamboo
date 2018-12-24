@@ -20,7 +20,7 @@ To Do
   - Add plotting.
 - Extended functionality.
   - Support formats other than csv.
-  - Embedded Python interpreter.
+  - Show console inside app.
   - Save as script.
 - Support.
   - Fill in the about section.
