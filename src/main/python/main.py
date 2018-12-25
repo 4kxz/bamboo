@@ -4,6 +4,7 @@ from fbs_runtime.application_context import ApplicationContext
 from IPython.terminal.embed import InteractiveShellEmbed
 from pandas import DataFrame
 from pandas import read_csv
+from pandas import Series
 from pandas import set_option
 from PyQt5 import QtCore
 from PyQt5.QtCore import QAbstractTableModel
@@ -32,37 +33,64 @@ class PandasTableView(QTableView):
 
 
 class PandasDataframeModel(QAbstractTableModel):
-    def __init__(self, *args, dataframe, **kwargs):
+    def __init__(self, dataframe, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._dataframe: DataFrame = dataframe
-        by = self._dataframe.columns[0]
-        self._dataframe.sort_values(by=by, ascending=True, inplace=True)
+        self.__data: DataFrame = dataframe
+        by = self.__data.columns[0]
+        self.__data.sort_values(by=by, ascending=True, inplace=True)
 
     def rowCount(self, parent=None):
-        return self._dataframe.shape[0]
+        return self.__data.shape[0]
 
     def columnCount(self, parent=None):
-        return self._dataframe.shape[1]
+        return self.__data.shape[1]
 
     def data(self, index, role):
         if role == QtCore.Qt.DisplayRole and index.isValid():
-            return str(self._dataframe.iloc[index.row(), index.column()])
+            return str(self.__data.iloc[index.row(), index.column()])
         else:
             return QVariant()
 
     def sort(self, column, order):
-        by = self._dataframe.columns[column]
+        by = self.__data.columns[column]
         ascending = order == QtCore.Qt.AscendingOrder
         self.layoutAboutToBeChanged.emit()
-        self._dataframe.sort_values(by=by, ascending=ascending, inplace=True)
+        self.__data.sort_values(by=by, ascending=ascending, inplace=True)
         self.layoutChanged.emit()
 
     def headerData(self, section, orientation, role):
         if role == QtCore.Qt.DisplayRole:
             if orientation == QtCore.Qt.Horizontal:
-                return str(self._dataframe.columns[section])
+                return str(self.__data.columns[section])
             else:
-                return str(self._dataframe.index[section])
+                return str(self.__data.index[section])
+        else:
+            return QVariant()
+
+
+class PandasSeriesModel(QAbstractTableModel):
+    def __init__(self, series, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__data: Series = series
+
+    def rowCount(self, parent=None):
+        return self.__data.shape[0]
+
+    def columnCount(self, parent=None):
+        return 1
+
+    def data(self, index, role):
+        if role == QtCore.Qt.DisplayRole and index.isValid():
+            return str(self.__data.iloc[index.row()])
+        else:
+            return QVariant()
+
+    def headerData(self, section, orientation, role):
+        if role == QtCore.Qt.DisplayRole:
+            if orientation == QtCore.Qt.Horizontal:
+                return "Values"
+            else:
+                return str(self.__data.index[section])
         else:
             return QVariant()
 
@@ -70,64 +98,77 @@ class PandasDataframeModel(QAbstractTableModel):
 class AppMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self._init_ui()
-        self._load("~/Documents/sample.csv")
+        self.__init_ui()
+        self.__load("~/Documents/sample.csv")
 
-    def _init_ui(self):
+    def __init_ui(self):
         self.setWindowTitle(f"Bamboos")
         self.resize(1280, 720)
-        self._init_menu()
-        self._init_table()
+        self.__init_table()
+        self.__init_menu()
 
-    def _init_table(self):
-        self._table = PandasTableView()
-        self._table.setSortingEnabled(True)
-        self.setCentralWidget(self._table)
+    def __init_table(self):
+        self.__table_view = PandasTableView()
+        self.__table_view.setSortingEnabled(True)
+        self.setCentralWidget(self.__table_view)
 
-    def _init_menu(self):
+    def __init_menu(self):
         menu_bar: QMenuBar = self.menuBar()
         f: QMenu = menu_bar.addMenu("&File")
-        f.addAction(self._action("&Open", "Ctrl+O", self._open))
-        f.addAction(self._action("&Console", "Ctrl+T", self._console))
-        d: QMenu = menu_bar.addMenu("&DataFrame")
-        d.addAction(self._action("&Describe", "Ctrl+Shift+D", self._describe))
+        f.addAction(self.__action("&Open", "Ctrl+O", self.__open))
+        f.addAction(self.__action("&Console", "Ctrl+T", self.__console))
+        d: QMenu = menu_bar.addMenu("&Data")
+        d.addAction(self.__action("&Describe", "Ctrl+Shift+D", self.__describe))
+        d.addAction(self.__action("&Count", "Ctrl+Shift+C", self.__count))
 
-    def _load(self, file_name):
+    def __load(self, file_name):
         self.setWindowTitle(f"{file_name} - Bamboos")
-        self._dataframe = read_csv(file_name)
-        model = PandasDataframeModel(dataframe=self._dataframe)
-        self._table.setModel(model)
-        self._table.resizeColumnsToContents()
-        self._status()
+        self.__dataframe = read_csv(file_name)
+        self.__table_view.setModel(PandasDataframeModel(self.__dataframe))
+        self.__table_view.resizeColumnsToContents()
+        self.__status()
 
-    def _status(self):
-        n, m = self._dataframe.shape
+    def __status(self):
+        n, m = self.__dataframe.shape
         self.statusBar().addWidget(QLabel(f"{n} rows, {m} columns"))
 
-    def _open(self):
+    def __open(self):
         file_name, _ = QFileDialog.getOpenFileName()
         if not file_name:
             return
-        self._load(file_name)
+        self.__load(file_name)
 
-    def _describe(self):
-        dataframe = self._dataframe.describe()
-        model = PandasDataframeModel(dataframe=dataframe)
+    def __describe(self):
+        data = self.__dataframe.describe()
+        self.__show_table(data, title="Describe")
+
+    def __count(self):
+        data = self.__dataframe.count()
+        self.__show_table(data, title="Count")
+
+    def __show_table(self, data, title=""):
         table = PandasTableView(self)
-        table.setModel(model)
+        table.setModel(self.__get_table_model(data))
         table.resizeColumnsToContents()
         dialog = QDialog(self)
         dialog.resize(self.size() * 0.9)
         layout = QVBoxLayout()
         dialog.setLayout(layout)
         layout.addWidget(table)
+        dialog.setWindowTitle(title)
         dialog.exec_()
 
-    def _console(self):
-        df = self._dataframe  # noqa
+    def __get_table_model(self, data):
+        if isinstance(data, DataFrame):
+            return PandasDataframeModel(data)
+        elif isinstance(data, Series):
+            return PandasSeriesModel(data)
+
+    def __console(self):
+        df = self.__dataframe  # noqa
         shell()
 
-    def _action(self, label, shortcut, callback):
+    def __action(self, label, shortcut, callback):
         action = QAction(QIcon("icon.ico"), label, self)
         action.setShortcut(shortcut)
         action.triggered.connect(callback)
